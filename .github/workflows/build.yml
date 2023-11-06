@@ -20,13 +20,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        java-version: [ 11, 17 ]
+        java-version: [ 11, 17, 21 ]
     permissions:
       contents: write
       checks: write
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Set up JDK ${{ matrix.java-version }}
       uses: actions/setup-java@v3
       with:
@@ -37,4 +37,4 @@ jobs:
       run: mvn -B package --no-transfer-progress --file pom.xml
     # Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
     - name: Update dependency graph
-      uses: advanced-security/maven-dependency-submission-action@v3.0.2
+      uses: advanced-security/maven-dependency-submission-action@v3.0.3
