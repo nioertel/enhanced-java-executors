@@ -1,10 +1,14 @@
 package io.github.nioertel.async.task.registry.internal;
 
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicLong;
 
 import io.github.nioertel.async.task.registry.TaskRegistryMetrics;
+import io.github.nioertel.async.task.registry.state.Versioned;
 
-class TaskRegistryMetricsInternal implements TaskRegistryMetrics {
+class TaskRegistryMetricsInternal implements TaskRegistryMetrics, Versioned {
+
+	private AtomicLong stateVersion;
 
 	/**
 	 * Tasks which are pending for execution or are currently being executed.
@@ -44,6 +48,7 @@ class TaskRegistryMetricsInternal implements TaskRegistryMetrics {
 	 * Constructor.
 	 */
 	TaskRegistryMetricsInternal() {
+		this.stateVersion = new AtomicLong();
 	}
 
 	/**
@@ -53,6 +58,7 @@ class TaskRegistryMetricsInternal implements TaskRegistryMetrics {
 	 *            The source to copy from.
 	 */
 	TaskRegistryMetricsInternal(TaskRegistryMetricsInternal source) {
+		this.stateVersion = new AtomicLong(source.stateVersion.get());
 		this.numCurrentlySubmittedTasks = source.numCurrentlySubmittedTasks;
 		this.numCurrentlyExecutingTasks = source.numCurrentlyExecutingTasks;
 		this.numCurrentlyParkedTasks = source.numCurrentlyParkedTasks;
@@ -101,6 +107,16 @@ class TaskRegistryMetricsInternal implements TaskRegistryMetrics {
 	@Override
 	public long getTotalExecutionTimeMs() {
 		return totalExecutionTimeMs;
+	}
+
+	@Override
+	public void incrementVersion() {
+		stateVersion.incrementAndGet();
+	}
+
+	@Override
+	public long getVersion() {
+		return stateVersion.get();
 	}
 
 	@Override

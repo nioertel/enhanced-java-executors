@@ -15,6 +15,7 @@ public class LoggingTaskRegistryStateChangeListener implements StateChangeListen
 	public void stateChanged(String triggeringOperation, TaskRegistryState newState) {
 		StringBuilder sb = new StringBuilder()//
 				.append("Current state:").append(System.lineSeparator())//
+				.append("  Current version: ").append(newState.getStateVersion()).append(System.lineSeparator())//
 				.append("  Last operation: ").append(triggeringOperation).append(System.lineSeparator())//
 				.append("  Last provided task id: ").append(newState.getLastUsedTaskId()).append(System.lineSeparator())//
 				.append("  Last provided task family id: ").append(newState.getLastUsedTaskFamilyId()).append(System.lineSeparator())//

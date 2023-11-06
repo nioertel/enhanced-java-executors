@@ -1,10 +1,11 @@
 package io.github.nioertel.async.task.registry;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public interface TaskRegistryState {
+
+	long getStateVersion();
 
 	long getLastUsedTaskId();
 
@@ -31,7 +32,7 @@ public interface TaskRegistryState {
 
 	Map<Long, Set<Long>> getCurrentlyAssignedTasksByTaskFamilyForExecutor(long executorId);
 
-	List<Long> getCurrentlyParkedTasks();
+	Set<Long> getCurrentlyParkedTasks();
 
 	TaskState getTaskState(long taskId);
 }

@@ -7,7 +7,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import org.assertj.core.api.BDDAssertions;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import io.github.nioertel.async.task.registry.listeners.LoggingTaskRegistryStateChangeListener;
@@ -173,7 +172,6 @@ class BurstingThreadPoolExecutorImplTest {
 	 * </ul>
 	 */
 	@Test
-	@Disabled("Need to implement resubmission in MultiThreadPoolExecutorImpl")
 	void testParkingAndResubmission() throws InterruptedException, ExecutionException {
 		BurstingThreadPoolExecutor executor = BurstingThreadPoolExecutor.newBurstingThreadPoolExecutor(//
 				2 // corePoolSize

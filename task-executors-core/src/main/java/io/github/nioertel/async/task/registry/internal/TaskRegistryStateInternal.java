@@ -1,18 +1,19 @@
 package io.github.nioertel.async.task.registry.internal;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 import io.github.nioertel.async.task.registry.TaskRegistryState;
 import io.github.nioertel.async.task.registry.TaskState;
+import io.github.nioertel.async.task.registry.state.Versioned;
 
-class TaskRegistryStateInternal implements TaskRegistryState {
+class TaskRegistryStateInternal implements TaskRegistryState, Versioned {
+
+	final AtomicLong stateVersion;
 
 	final AtomicLong taskIdProvider;
 
@@ -52,19 +53,20 @@ class TaskRegistryStateInternal implements TaskRegistryState {
 	/**
 	 * The tasks that have been parked during executor assignment.
 	 */
-	final List<Long> currentlyParkedTasks;
+	final Set<Long> currentlyParkedTasks;
 
 	/**
 	 * Constructor.
 	 */
 	public TaskRegistryStateInternal() {
+		this.stateVersion = new AtomicLong();
 		this.taskIdProvider = new AtomicLong();
 		this.taskFamilyIdProvider = new AtomicLong();
 		this.currentlySubmittedTasks = new LinkedHashMap<>();
 		this.currentlyExecutingTasks = new LinkedHashSet<>();
 		this.threadIdTaskIdMappings = new LinkedHashMap<>();
 		this.currentlyAssignedTasksByExecutorAndTaskFamily = new LinkedHashMap<>();
-		this.currentlyParkedTasks = new ArrayList<>();
+		this.currentlyParkedTasks = new LinkedHashSet<>();
 	}
 
 	/**
@@ -74,6 +76,7 @@ class TaskRegistryStateInternal implements TaskRegistryState {
 	 *            The source to copy from.
 	 */
 	public TaskRegistryStateInternal(TaskRegistryStateInternal source) {
+		this.stateVersion = new AtomicLong(source.stateVersion.get());
 		this.taskIdProvider = new AtomicLong(source.taskIdProvider.get());
 		this.taskFamilyIdProvider = new AtomicLong(source.taskFamilyIdProvider.get());
 		this.currentlySubmittedTasks = new LinkedHashMap<>();
@@ -90,7 +93,12 @@ class TaskRegistryStateInternal implements TaskRegistryState {
 			});
 			this.currentlyAssignedTasksByExecutorAndTaskFamily.put(executorId, currentlyAssignedTasksForExecutorByTaskFamily);
 		});
-		this.currentlyParkedTasks = new ArrayList<>(source.currentlyParkedTasks);
+		this.currentlyParkedTasks = new LinkedHashSet<>(source.currentlyParkedTasks);
+	}
+
+	@Override
+	public long getStateVersion() {
+		return stateVersion.get();
 	}
 
 	@Override
@@ -129,13 +137,23 @@ class TaskRegistryStateInternal implements TaskRegistryState {
 	}
 
 	@Override
-	public List<Long> getCurrentlyParkedTasks() {
-		return Collections.unmodifiableList(currentlyParkedTasks);
+	public Set<Long> getCurrentlyParkedTasks() {
+		return Collections.unmodifiableSet(currentlyParkedTasks);
 	}
 
 	@Override
 	public TaskState getTaskState(long taskId) {
 		return currentlySubmittedTasks.get(taskId);
+	}
+
+	@Override
+	public void incrementVersion() {
+		stateVersion.incrementAndGet();
+	}
+
+	@Override
+	public long getVersion() {
+		return stateVersion.get();
 	}
 
 }

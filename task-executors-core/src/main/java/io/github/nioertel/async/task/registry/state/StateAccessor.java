@@ -15,7 +15,7 @@ import java.util.function.Supplier;
  * @param <T>
  *            The state type.
  */
-public final class StateAccessor<T, R> {
+public final class StateAccessor<T extends Versioned, R> {
 
 	private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
 
@@ -63,6 +63,7 @@ public final class StateAccessor<T, R> {
 				// This code is only required because Java compiler can't know that we won't access it later
 				currentStateClone = null;
 			}
+			state.incrementVersion();
 		} finally {
 			writeLock.unlock();
 		}

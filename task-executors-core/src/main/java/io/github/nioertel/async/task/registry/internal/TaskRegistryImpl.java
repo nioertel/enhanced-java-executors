@@ -151,6 +151,9 @@ final class TaskRegistryImpl implements TaskRegistry {
 							// }
 						}
 					}
+					for (TaskState taskState : resubmittedTasks) {
+						state.currentlyParkedTasks.remove(taskState.getId());
+					}
 					return resubmittedTasks;
 				}, //
 				listenerNotifier.getListenerWrapper()//
@@ -255,4 +258,5 @@ final class TaskRegistryImpl implements TaskRegistry {
 	public TaskRegistryState getStateSnapshot() {
 		return stateAccessor.snapshot();
 	}
+
 }

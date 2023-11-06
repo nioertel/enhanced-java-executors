@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.RunnableFuture;
@@ -47,6 +48,8 @@ class MultiThreadPoolExecutorImpl<T extends ExecutorIdAssigner> extends Abstract
 	private final MultiExecutorState executorState;
 
 	private final T executorIdAssigner;
+
+	private final Map<Long, Runnable> parkedDecoratedTasks = new ConcurrentHashMap<>();
 
 	private boolean secondaryPoolEnabled;
 
@@ -120,25 +123,54 @@ class MultiThreadPoolExecutorImpl<T extends ExecutorIdAssigner> extends Abstract
 			decoratedTask = wrappedCommand;
 			command = wrappedCommand;
 		}
+		command = addResubmissionTrigger(command);
+
 		TaskState submissionResult = taskRegistry.taskSubmitted(decoratedTask, Thread.currentThread());
-		if (TaskExecutorAssignmentState.PARKED == submissionResult.getExecutorAssignmentState()) {
-			logger.error("Task {} has been temporarily parked and will be resubmitted later.", decoratedTask.getId());
-			// TODO: Implement!!!
-			return;
-		} else if (MAIN_EXECUTOR_ID == submissionResult.getAssignedExecutorId()) {
-			logger.debug("Running task {} on main executor.", decoratedTask.getId());
-			mainThreadPoolExecutor.execute(command);
-		} else if (!secondaryPoolEnabled) {
-			logger.error("Cannot run task {} on secondary executor when secondary pool is set to maximum size 0.", decoratedTask.getId());
-			throw new IllegalStateException("Secondary pool has been scaled to 0. Cannot run task.");
-		} else {
-			logger.debug("Running task {} on secondary executor.", decoratedTask.getId());
-			secondaryThreadPoolExecutor.execute(command);
+		submitTaskToExecutor(command, submissionResult);
+	}
+
+	private Runnable addResubmissionTrigger(Runnable command) {
+		return () -> {
+			try {
+				command.run();
+			} finally {
+				if (!parkedDecoratedTasks.isEmpty()) {
+					resubmitParkedTasks();
+				}
+			}
+		};
+	}
+
+	private void resubmitParkedTasks() {
+		for (TaskState submissionResult : taskRegistry.resubmitParkedTasks()) {
+			Runnable taskForResubmission = parkedDecoratedTasks.remove(submissionResult.getId());
+			if (null == taskForResubmission) {
+				logger.warn("Skipping resubmission of task {} as task does not exist.", submissionResult.getId());
+				// TODO: cleanup registry state
+			} else {
+				// TODO: This can likely be further optimised (currently we run into situations where this is called multiple times in
+				// parallel - which is technically ok but costs performance)
+				submitTaskToExecutor(taskForResubmission, submissionResult);
+			}
 		}
 	}
 
-	// TODO 1: We need to keep parked tasks in a map
-	// TODO 2: At some point we need to resubmit parked tasks!!!
+	private void submitTaskToExecutor(Runnable command, TaskState submissionResult) {
+		if (TaskExecutorAssignmentState.PARKED == submissionResult.getExecutorAssignmentState()) {
+			logger.error("Task {} has been temporarily parked and will be resubmitted later.", submissionResult.getId());
+			parkedDecoratedTasks.put(submissionResult.getId(), command);
+			return;
+		} else if (MAIN_EXECUTOR_ID == submissionResult.getAssignedExecutorId()) {
+			logger.debug("Running task {} on main executor.", submissionResult.getId());
+			mainThreadPoolExecutor.execute(command);
+		} else if (!secondaryPoolEnabled) {
+			logger.error("Cannot run task {} on secondary executor when secondary pool is set to maximum size 0.", submissionResult.getId());
+			throw new IllegalStateException("Secondary pool has been scaled to 0. Cannot run task.");
+		} else {
+			logger.debug("Running task {} on secondary executor.", submissionResult.getId());
+			secondaryThreadPoolExecutor.execute(command);
+		}
+	}
 
 	private IdentifiableRunnable tryExtractPreDecoratedTask(Runnable command) {
 		if (command instanceof IdentifiableRunnable) {
