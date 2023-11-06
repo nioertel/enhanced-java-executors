@@ -4,10 +4,10 @@ import java.util.Set;
 
 import io.github.nioertel.async.task.registry.ExecutorIdAssigner;
 import io.github.nioertel.async.task.registry.ExecutorIdAssignment;
+import io.github.nioertel.async.task.registry.ExecutorIdAssignment.ExecutorIdAssignmentCommand;
 import io.github.nioertel.async.task.registry.TaskRegistryInfoAccessor;
 import io.github.nioertel.async.task.registry.TaskRegistryState;
 import io.github.nioertel.async.task.registry.TaskState;
-import io.github.nioertel.async.task.registry.ExecutorIdAssignment.ExecutorIdAssignmentCommand;
 
 class BurstingThreadPoolExecutorIdAssigner implements ExecutorIdAssigner {
 
@@ -29,6 +29,7 @@ class BurstingThreadPoolExecutorIdAssigner implements ExecutorIdAssigner {
 
 	public BurstingThreadPoolExecutorIdAssigner(MultiExecutorState executorState, int burstExecutionMDOP) {
 		this.executorState = executorState;
+		this.burstExecutionMDOP = burstExecutionMDOP;
 	}
 
 	public void setBurstExecutionMDOP(int burstExecutionMDOP) {
@@ -78,7 +79,7 @@ class BurstingThreadPoolExecutorIdAssigner implements ExecutorIdAssigner {
 	}
 
 	private boolean isBurstCapacityAvailable(long taskFamily, TaskRegistryState registryState) {
-		Set<Long> currentlyExecutingTaskFamilies = registryState.getCurrentlyExecutingTasksByTaskFamily().keySet();
+		Set<Long> currentlyExecutingTaskFamilies = registryState.getCurrentlyAssignedTasksByTaskFamilyForExecutor(BURST_EXECUTOR_ID).keySet();
 		return currentlyExecutingTaskFamilies.contains(taskFamily) || currentlyExecutingTaskFamilies.size() < burstExecutionMDOP;
 	}
 }

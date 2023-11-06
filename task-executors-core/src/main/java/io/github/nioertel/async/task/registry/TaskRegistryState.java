@@ -27,7 +27,9 @@ public interface TaskRegistryState {
 
 	Map<Long, Long> getThreadIdTaskIdMappings();
 
-	Map<Long, Set<Long>> getCurrentlyExecutingTasksByTaskFamily();
+	Map<Long, Map<Long, Set<Long>>> getCurrentlyAssignedTasksByExecutorAndTaskFamily();
+
+	Map<Long, Set<Long>> getCurrentlyAssignedTasksByTaskFamilyForExecutor(long executorId);
 
 	List<Long> getCurrentlyParkedTasks();
 

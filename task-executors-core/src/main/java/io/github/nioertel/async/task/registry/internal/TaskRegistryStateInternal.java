@@ -14,9 +14,6 @@ import io.github.nioertel.async.task.registry.TaskState;
 
 class TaskRegistryStateInternal implements TaskRegistryState {
 
-	// TODO: consider moving task details into a task object with read-only interface
-	// TODO: Also harmonize TaskSubmissionResult and TaskDetails
-
 	final AtomicLong taskIdProvider;
 
 	final AtomicLong taskFamilyIdProvider;
@@ -28,6 +25,14 @@ class TaskRegistryStateInternal implements TaskRegistryState {
 	 * Value: The task state.
 	 */
 	final Map<Long, TaskStateInternal> currentlySubmittedTasks;
+
+	/**
+	 * A map containing the currently assigned tasks by executor and task family.
+	 *
+	 * Key: Executor ID
+	 * Value: Map with key = Task Family ID and value = Task IDs
+	 */
+	final Map<Long, Map<Long, Set<Long>>> currentlyAssignedTasksByExecutorAndTaskFamily;
 
 	/**
 	 * The tasks which are currently running.
@@ -45,11 +50,6 @@ class TaskRegistryStateInternal implements TaskRegistryState {
 	final Map<Long, Long> threadIdTaskIdMappings;
 
 	/**
-	 * 
-	 */
-	final Map<Long, Set<Long>> currentlyExecutingTasksByTaskFamily;
-
-	/**
 	 * The tasks that have been parked during executor assignment.
 	 */
 	final List<Long> currentlyParkedTasks;
@@ -63,7 +63,7 @@ class TaskRegistryStateInternal implements TaskRegistryState {
 		this.currentlySubmittedTasks = new LinkedHashMap<>();
 		this.currentlyExecutingTasks = new LinkedHashSet<>();
 		this.threadIdTaskIdMappings = new LinkedHashMap<>();
-		this.currentlyExecutingTasksByTaskFamily = new LinkedHashMap<>();
+		this.currentlyAssignedTasksByExecutorAndTaskFamily = new LinkedHashMap<>();
 		this.currentlyParkedTasks = new ArrayList<>();
 	}
 
@@ -82,7 +82,14 @@ class TaskRegistryStateInternal implements TaskRegistryState {
 		});
 		this.currentlyExecutingTasks = new LinkedHashSet<>(source.currentlyExecutingTasks);
 		this.threadIdTaskIdMappings = new LinkedHashMap<>(source.threadIdTaskIdMappings);
-		this.currentlyExecutingTasksByTaskFamily = new LinkedHashMap<>(source.currentlyExecutingTasksByTaskFamily);
+		this.currentlyAssignedTasksByExecutorAndTaskFamily = new LinkedHashMap<>();
+		source.currentlyAssignedTasksByExecutorAndTaskFamily.forEach((executorId, taskIdsByFamilyId) -> {
+			Map<Long, Set<Long>> currentlyAssignedTasksForExecutorByTaskFamily = new LinkedHashMap<>();
+			taskIdsByFamilyId.forEach((familyId, taskIds) -> {
+				currentlyAssignedTasksForExecutorByTaskFamily.put(familyId, new LinkedHashSet<>(taskIds));
+			});
+			this.currentlyAssignedTasksByExecutorAndTaskFamily.put(executorId, currentlyAssignedTasksForExecutorByTaskFamily);
+		});
 		this.currentlyParkedTasks = new ArrayList<>(source.currentlyParkedTasks);
 	}
 
@@ -112,8 +119,13 @@ class TaskRegistryStateInternal implements TaskRegistryState {
 	}
 
 	@Override
-	public Map<Long, Set<Long>> getCurrentlyExecutingTasksByTaskFamily() {
-		return Collections.unmodifiableMap(currentlyExecutingTasksByTaskFamily);
+	public Map<Long, Map<Long, Set<Long>>> getCurrentlyAssignedTasksByExecutorAndTaskFamily() {
+		return Collections.unmodifiableMap(currentlyAssignedTasksByExecutorAndTaskFamily);
+	}
+
+	@Override
+	public Map<Long, Set<Long>> getCurrentlyAssignedTasksByTaskFamilyForExecutor(long executorId) {
+		return Collections.unmodifiableMap(currentlyAssignedTasksByExecutorAndTaskFamily.getOrDefault(executorId, Map.of()));
 	}
 
 	@Override

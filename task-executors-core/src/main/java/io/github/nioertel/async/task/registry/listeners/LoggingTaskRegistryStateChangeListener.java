@@ -22,9 +22,11 @@ public class LoggingTaskRegistryStateChangeListener implements StateChangeListen
 		for (TaskState taskState : newState.getCurrentlySubmittedTasks().values()) {
 			sb.append("    ").append(taskState).append(System.lineSeparator());
 		}
-		sb.append("  Currently executing tasks: ").append(newState.getCurrentlyExecutingTasks()).append(System.lineSeparator());
-		sb.append("  Currently executing tasks by family: ").append(newState.getCurrentlyExecutingTasksByTaskFamily()).append(System.lineSeparator());
-		sb.append("  Currently parked tasks: ").append(newState.getCurrentlyParkedTasks()).append(System.lineSeparator());
+		sb//
+				.append("  Currently submitted tasks by executor + family: ").append(newState.getCurrentlyAssignedTasksByExecutorAndTaskFamily())
+				.append(System.lineSeparator())//
+				.append("  Currently executing tasks: ").append(newState.getCurrentlyExecutingTasks()).append(System.lineSeparator())//
+				.append("  Currently parked tasks: ").append(newState.getCurrentlyParkedTasks()).append(System.lineSeparator());
 		LOGGER.info("{}", sb);
 	}
 

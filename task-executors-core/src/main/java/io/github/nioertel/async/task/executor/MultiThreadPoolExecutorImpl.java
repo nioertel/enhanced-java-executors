@@ -23,6 +23,7 @@ import io.github.nioertel.async.task.registry.TaskRegistryInfoAccessor;
 import io.github.nioertel.async.task.registry.TaskRegistryMetrics;
 import io.github.nioertel.async.task.registry.TaskRegistryState;
 import io.github.nioertel.async.task.registry.TaskState;
+import io.github.nioertel.async.task.registry.internal.TaskExecutorAssignmentState;
 import io.github.nioertel.async.task.registry.internal.TaskRegistry;
 import io.github.nioertel.async.task.registry.internal.ThreadTrackingTaskDecorator;
 import io.github.nioertel.async.task.registry.state.StateChangeListener;
@@ -120,7 +121,11 @@ class MultiThreadPoolExecutorImpl<T extends ExecutorIdAssigner> extends Abstract
 			command = wrappedCommand;
 		}
 		TaskState submissionResult = taskRegistry.taskSubmitted(decoratedTask, Thread.currentThread());
-		if (MAIN_EXECUTOR_ID == submissionResult.getAssignedExecutorId()) {
+		if (TaskExecutorAssignmentState.PARKED == submissionResult.getExecutorAssignmentState()) {
+			logger.error("Task {} has been temporarily parked and will be resubmitted later.", decoratedTask.getId());
+			// TODO: Implement!!!
+			return;
+		} else if (MAIN_EXECUTOR_ID == submissionResult.getAssignedExecutorId()) {
 			logger.debug("Running task {} on main executor.", decoratedTask.getId());
 			mainThreadPoolExecutor.execute(command);
 		} else if (!secondaryPoolEnabled) {
@@ -131,6 +136,9 @@ class MultiThreadPoolExecutorImpl<T extends ExecutorIdAssigner> extends Abstract
 			secondaryThreadPoolExecutor.execute(command);
 		}
 	}
+
+	// TODO 1: We need to keep parked tasks in a map
+	// TODO 2: At some point we need to resubmit parked tasks!!!
 
 	private IdentifiableRunnable tryExtractPreDecoratedTask(Runnable command) {
 		if (command instanceof IdentifiableRunnable) {

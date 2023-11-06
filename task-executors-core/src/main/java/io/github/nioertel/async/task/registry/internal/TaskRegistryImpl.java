@@ -1,28 +1,27 @@
 package io.github.nioertel.async.task.registry.internal;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.github.nioertel.async.task.registry.ExecutorIdAssigner;
 import io.github.nioertel.async.task.registry.ExecutorIdAssignment;
+import io.github.nioertel.async.task.registry.ExecutorIdAssignment.ExecutorIdAssignmentCommand;
 import io.github.nioertel.async.task.registry.Identifiable;
 import io.github.nioertel.async.task.registry.TaskRegistryMetrics;
 import io.github.nioertel.async.task.registry.TaskRegistryState;
 import io.github.nioertel.async.task.registry.TaskState;
-import io.github.nioertel.async.task.registry.ExecutorIdAssignment.ExecutorIdAssignmentCommand;
 import io.github.nioertel.async.task.registry.state.StateAccessor;
 import io.github.nioertel.async.task.registry.state.StateChangeListener;
 import io.github.nioertel.async.task.registry.state.StateChangeLstenerNotifier;
 
 final class TaskRegistryImpl implements TaskRegistry {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(TaskRegistryImpl.class);
+	// private static final Logger LOGGER = LoggerFactory.getLogger(TaskRegistryImpl.class);
 
 	private final ThreadTrackingTaskDecoratorImpl threadTrackingTaskDecorator = new ThreadTrackingTaskDecoratorImpl(this);
 
@@ -70,7 +69,6 @@ final class TaskRegistryImpl implements TaskRegistry {
 					taskStateInternal.setAssignedThreadId(assignedThreadId);
 					state.currentlyExecutingTasks.add(taskId);
 					state.threadIdTaskIdMappings.put(assignedThreadId, taskId);
-					state.currentlyExecutingTasksByTaskFamily.computeIfAbsent(taskStateInternal.getTaskFamilyId(), f -> new HashSet<>()).add(taskId);
 					return taskStateInternal;
 				}, //
 				listenerNotifier.getListenerWrapper());
@@ -96,12 +94,19 @@ final class TaskRegistryImpl implements TaskRegistry {
 					state.currentlyExecutingTasks.remove(taskId);
 					// once execution finishes we can remove the task from the registry
 					TaskStateInternal taskStateInternal = state.currentlySubmittedTasks.remove(taskId);
-					taskStateInternal.setAssignedExecutorId(executionEndDateEpochMillis);
+					taskStateInternal.setExecutionEndDateEpochMillis(executionEndDateEpochMillis);
 					state.threadIdTaskIdMappings.remove(taskStateInternal.getAssignedThreadId());
-					Set<Long> tasksForParentTaskFamily = state.currentlyExecutingTasksByTaskFamily.get(taskStateInternal.getTaskFamilyId());
+
+					// remove from submitted tasks by family+executor tracker
+					Map<Long, Set<Long>> currentlyExecutingTasksByTaskFamilyForExecutor =
+							state.currentlyAssignedTasksByExecutorAndTaskFamily.get(taskStateInternal.getAssignedExecutorId());
+					Set<Long> tasksForParentTaskFamily = currentlyExecutingTasksByTaskFamilyForExecutor.get(taskStateInternal.getTaskFamilyId());
 					tasksForParentTaskFamily.remove(taskId);
 					if (tasksForParentTaskFamily.isEmpty()) {
-						state.currentlyExecutingTasksByTaskFamily.remove(taskStateInternal.getTaskFamilyId());
+						currentlyExecutingTasksByTaskFamilyForExecutor.remove(taskStateInternal.getTaskFamilyId());
+						if (currentlyExecutingTasksByTaskFamilyForExecutor.isEmpty()) {
+							state.currentlyAssignedTasksByExecutorAndTaskFamily.remove(taskStateInternal.getTaskFamilyId());
+						}
 					}
 					return taskStateInternal;
 				}, //
@@ -132,14 +137,18 @@ final class TaskRegistryImpl implements TaskRegistry {
 							taskState.setExecutorAssignmentState(TaskExecutorAssignmentState.ASSIGNED);
 							taskState.setAssignedExecutorId(executorIdAssignment.getAssignedExecutorId());
 							taskState.setExecutorAssignedDateEpochMillis(System.currentTimeMillis());
+							state.currentlyAssignedTasksByExecutorAndTaskFamily//
+									.computeIfAbsent(taskState.getAssignedExecutorId(), e -> new LinkedHashMap<>())//
+									.computeIfAbsent(taskState.getTaskFamilyId(), f -> new LinkedHashSet<>())//
+									.add(taskId);
 							resubmittedTasks.add(taskState);
 						} else {
-							long currentWaitingTimeMs = System.currentTimeMillis() - taskState.getSubmissionDateEpochMillis();
-							if (currentWaitingTimeMs > 30_000L) {
-								// TODO: Work around log flood!!!
-								LOGGER.warn("Task {} has been parked for {} seconds and is still not ready for execution!", taskState.getId(),
-										currentWaitingTimeMs / 1_000L);
-							}
+							// TODO: Work around log flood!!!
+							// long currentWaitingTimeMs = System.currentTimeMillis() - taskState.getSubmissionDateEpochMillis();
+							// if (currentWaitingTimeMs > 30_000L) {
+							// LOGGER.warn("Task {} has been parked for {} seconds and is still not ready for execution!", taskState.getId(),
+							// currentWaitingTimeMs / 1_000L);
+							// }
 						}
 					}
 					return resubmittedTasks;
@@ -198,6 +207,10 @@ final class TaskRegistryImpl implements TaskRegistry {
 						newTaskState.setExecutorAssignmentState(TaskExecutorAssignmentState.ASSIGNED);
 						newTaskState.setAssignedExecutorId(executorIdAssignment.getAssignedExecutorId());
 						newTaskState.setExecutorAssignedDateEpochMillis(System.currentTimeMillis());
+						state.currentlyAssignedTasksByExecutorAndTaskFamily//
+								.computeIfAbsent(newTaskState.getAssignedExecutorId(), e -> new LinkedHashMap<>())//
+								.computeIfAbsent(newTaskState.getTaskFamilyId(), f -> new LinkedHashSet<>())//
+								.add(taskId);
 					} else {
 						newTaskState.setExecutorAssignmentState(TaskExecutorAssignmentState.PARKED);
 						state.currentlyParkedTasks.add(taskId);
