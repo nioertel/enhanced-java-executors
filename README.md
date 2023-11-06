@@ -30,6 +30,7 @@ TODO: add problem description.
 Java Code Snippet (usage is exactly the same as for normal `ThreadPoolTaskExecutor`):
 ```java
 // ...
+import io.github.nioertel.async.task.executor.BurstingThreadPoolExecutor;
 import io.github.nioertel.async.task.registry.listeners.LoggingTaskRegistryStateChangeListener;
 // ...
 
@@ -70,8 +71,8 @@ try {
 
 ----------------------------------------------------
 ## task-executors-spring5
-
 TODO: coming soon
+
 ----------------------------------------------------
 
 ## task-executors-test-helper
