@@ -7,7 +7,10 @@
 	<artifactId>task-executors</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<java.version>11</java.version>
+		<maven.compiler.source>${java.version}</maven.compiler.source>
+		<maven.compiler.target>${java.version}</maven.compiler.target>
 		<!-- 3rd party dependency version -->
 		<assertj.version>3.24.2</assertj.version>
 		<junit-jupiter.version>5.10.0</junit-jupiter.version>
