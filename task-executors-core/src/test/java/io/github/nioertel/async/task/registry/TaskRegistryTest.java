@@ -203,7 +203,7 @@ class TaskRegistryTest {
 		BDDAssertions.assertThat(taskStates).hasSize(1);
 		taskState = taskStates.get(0);
 		BDDAssertions.assertThat(taskState.getExecutorAssignmentState()).isSameAs(TaskExecutorAssignmentState.ASSIGNED);
-		BDDAssertions.assertThat(taskRegistry.getStateSnapshot().getCurrentlyParkedTasks()).containsExactly(task1.getId());
+		BDDAssertions.assertThat(taskRegistry.getStateSnapshot().getCurrentlyParkedTasks()).isEmpty();
 		BDDAssertions.assertThat(taskRegistry.getMetricsSnapshot().getNumCurrentlyParkedTasks()).isEqualTo(0L);
 		BDDAssertions.assertThat(taskRegistry.getMetricsSnapshot().getTotalNumSubmittedTasks()).isEqualTo(1L);
 
