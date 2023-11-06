@@ -72,3 +72,7 @@ try {
 ## task-executors-spring5
 
 TODO: coming soon
+----------------------------------------------------
+
+## task-executors-test-helper
+Tools for testing of the task-executors. Only for internal use currently.
