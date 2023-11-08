@@ -21,7 +21,7 @@ class TaskStateInternal implements TaskState {
 
 	private final long submissionDateEpochMillis;
 
-	private TaskExecutorAssignmentState executorAssignmentState = TaskExecutorAssignmentState.PENDING;
+	private TaskProgress taskProgress = TaskProgress.CREATED;
 
 	private long assignedExecutorId = -1;
 
@@ -57,7 +57,7 @@ class TaskStateInternal implements TaskState {
 		this.taskFamilyId = other.taskFamilyId;
 		this.stackLevel = other.stackLevel;
 		this.submissionDateEpochMillis = other.submissionDateEpochMillis;
-		this.executorAssignmentState = other.executorAssignmentState;
+		this.taskProgress = other.taskProgress;
 		this.assignedExecutorId = other.assignedExecutorId;
 		this.assignedThreadId = other.assignedThreadId;
 		this.executorAssignedDateEpochMillis = other.executorAssignedDateEpochMillis;
@@ -91,12 +91,12 @@ class TaskStateInternal implements TaskState {
 	}
 
 	@Override
-	public TaskExecutorAssignmentState getExecutorAssignmentState() {
-		return executorAssignmentState;
+	public TaskProgress getTaskProgress() {
+		return taskProgress;
 	}
 
-	public void setExecutorAssignmentState(TaskExecutorAssignmentState executorAssignmentState) {
-		this.executorAssignmentState = executorAssignmentState;
+	public void setTaskProgress(TaskProgress taskProgress) {
+		this.taskProgress = taskProgress;
 	}
 
 	@Override
@@ -148,10 +148,11 @@ class TaskStateInternal implements TaskState {
 	public String toString() {
 		return new StringBuilder()//
 				.append("TaskState[id=").append(String.format(Locale.US, "%,d", id))//
+				.append(", progress=").append(taskProgress)//
 				.append(", parent=").append(getParentTaskId())//
 				.append(", family=").append(String.format(Locale.US, "%,d", taskFamilyId))//
 				.append(", stackLevel=").append(stackLevel)//
-				.append(", assignedExecutor=").append(assignedExecutorId).append("(").append(executorAssignmentState).append(")")//
+				.append(", assignedExecutor=").append(assignedExecutorId)//
 				.append(", assignedThread=").append(String.format(Locale.US, "%,d", assignedThreadId))//
 				.append(", submitted=").append(String.format(Locale.US, "%,d", submissionDateEpochMillis))//
 				.append(", execAssigned=").append(String.format(Locale.US, "%,d", executorAssignedDateEpochMillis))//

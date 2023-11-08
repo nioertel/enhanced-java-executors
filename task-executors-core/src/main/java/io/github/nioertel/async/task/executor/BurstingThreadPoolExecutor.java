@@ -8,15 +8,14 @@ import java.util.concurrent.TimeUnit;
 public interface BurstingThreadPoolExecutor extends MultiThreadPoolExecutor {
 
 	/**
-	 * TODO: Add this info somewhere:
+	 * Constructor. Create a new bursting thread pool executor. For the details on all parameters see
+	 * {@link java.util.concurrent.ThreadPoolExecutor}.
+	 * <p>
+	 * Important info on the relationship between corePoolSize, maximumPoolSize and workQueue:<br />
 	 * When we submit a new task to the ThreadPoolTaskExecutor, it creates a new thread if fewer than corePoolSize threads
 	 * are running, even if there are idle threads in the pool, or if fewer than maxPoolSize threads are running and the
 	 * queue defined by queueCapacity is full.
-	 */
-
-	/**
-	 * Constructor. Create a new bursting thread pool executor. For the details on all parameters see
-	 * {@link java.util.concurrent.ThreadPoolExecutor}.
+	 * </p>
 	 *
 	 * @param corePoolSize
 	 *            The core pool size of the main pool.

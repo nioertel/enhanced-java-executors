@@ -2,6 +2,8 @@ package io.github.nioertel.async.task.registry;
 
 public interface TaskRegistryMetrics {
 
+	long getStateVersion();
+
 	/**
 	 * @return Tasks which are pending for execution or are currently being executed.
 	 */
@@ -21,6 +23,8 @@ public interface TaskRegistryMetrics {
 	long getTotalNumSubmittedTasks();
 
 	long getTotalNumExecutedTasks();
+
+	long getTotalNumDiscardedTasks();
 
 	/**
 	 * @return The total wait time for executor assignment.

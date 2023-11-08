@@ -1,6 +1,6 @@
 package io.github.nioertel.async.task.registry;
 
-import io.github.nioertel.async.task.registry.internal.TaskExecutorAssignmentState;
+import io.github.nioertel.async.task.registry.internal.TaskProgress;
 
 public interface TaskState {
 
@@ -14,7 +14,7 @@ public interface TaskState {
 
 	long getSubmissionDateEpochMillis();
 
-	TaskExecutorAssignmentState getExecutorAssignmentState();
+	TaskProgress getTaskProgress();
 
 	long getAssignedExecutorId();
 

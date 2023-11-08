@@ -3,6 +3,7 @@ package io.github.nioertel.async.task.registry.state;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -43,19 +44,103 @@ public final class StateAccessor<T extends Versioned, R> {
 	 *            The operation that triggered the update.
 	 * @param command
 	 *            The command to be run on the state object.
-	 * @param changeListeners
-	 *            The change listeners to be notified.
+	 * @param changeListener
+	 *            The change listener to be notified.
 	 *
 	 * @return The result of the provided command.
 	 */
+	public R update(String triggeringOperation, Consumer<T> command, StateChangeListener<R> changeListener) {
+		R currentStateClone;
+		writeLock.lock();
+		try {
+			command.accept(state);
+			state.setLastOperation(triggeringOperation);
+
+			// NOTE: we could convert the write lock into a read lock here
+			currentStateClone = stateCloner.apply(state);
+			state.incrementVersion();
+		} finally {
+			writeLock.unlock();
+		}
+		changeListener.stateChanged(triggeringOperation, currentStateClone);
+		return currentStateClone;
+	}
+
+	/**
+	 * Perform a write operation on the state and return its result.
+	 * NOTE: This operation will create a write lock on the state (i.e. while the operation is running, the state is blocked
+	 * from other access).
+	 *
+	 * @param triggeringOperation
+	 *            The operation that triggered the update.
+	 * @param command
+	 *            The command to be run on the state object.
+	 * @param changeListener
+	 *            The change listener to be notified.
+	 */
 	public <S> S update(String triggeringOperation, Function<T, S> command, StateChangeListener<R> changeListener) {
+		return updateInternal(//
+				triggeringOperation, //
+				command, //
+				changeListener//
+		);
+	}
+
+	/**
+	 * Perform a write operation on the state.
+	 * NOTE: This operation will create a write lock on the state (i.e. while the operation is running, the state is blocked
+	 * from other access).
+	 *
+	 * @param triggeringOperation
+	 *            The operation that triggered the update.
+	 * @param command
+	 *            The command to be run on the state object.
+	 * @param changeListener
+	 *            The change listener to be notified.
+	 */
+	public void updateWithoutResult(String triggeringOperation, Consumer<T> command, StateChangeListener<R> changeListener) {
+		updateInternal(//
+				triggeringOperation, //
+				state -> {
+					command.accept(state);
+					return null;
+				}, //
+				changeListener//
+		);
+	}
+
+	/**
+	 * Perform a write operation on the state.
+	 * NOTE: This operation will create a write lock on the state (i.e. while the operation is running, the state is blocked
+	 * from other access).
+	 *
+	 * @param <S>
+	 *            The result type.
+	 * @param triggeringOperation
+	 *            The operation that triggered the update.
+	 * @param command
+	 *            The command to be run on the state object.
+	 * @param operationResultConsumer
+	 *            An optional consumer that receives the result of the operation.
+	 * @param changeListener
+	 *            The change listener to be notified.
+	 *
+	 * @return The result of the provided command.
+	 */
+	private <S> S updateInternal(String triggeringOperation, Function<T, S> command, StateChangeListener<R> changeListener) {
 		S result;
 		R currentStateClone;
 
 		writeLock.lock();
 		try {
 			result = command.apply(state);
-			// if we need to notify change listeners, create a clone of the state here so we can release the lock
+			state.setLastOperation(triggeringOperation);
+			// make it a little harder to leak the state to the outside!
+			if (result == state) {
+				throw new UnsupportedOperationException("Leaking the state out of the change operation is forbidden!");
+			}
+			state.incrementVersion();
+			// if we need to inform a change listener, create a clone of the state here so we can release the lock
 			// NOTE: we could convert the write lock into a read lock here
 			if (null != changeListener) {
 				currentStateClone = stateCloner.apply(state);
@@ -63,7 +148,6 @@ public final class StateAccessor<T extends Versioned, R> {
 				// This code is only required because Java compiler can't know that we won't access it later
 				currentStateClone = null;
 			}
-			state.incrementVersion();
 		} finally {
 			writeLock.unlock();
 		}

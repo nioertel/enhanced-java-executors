@@ -16,15 +16,14 @@ import io.github.nioertel.async.task.registry.state.StateChangeListener;
 public interface MultiThreadPoolExecutor extends ExecutorService {
 
 	/**
-	 * TODO: Add this info somewhere:
+	 * Create a new bursting thread pool executor. For the details on all parameters see
+	 * {@link java.util.concurrent.ThreadPoolExecutor}.
+	 * <p>
+	 * Important info on the relationship between corePoolSize, maximumPoolSize and workQueue:<br />
 	 * When we submit a new task to the ThreadPoolTaskExecutor, it creates a new thread if fewer than corePoolSize threads
 	 * are running, even if there are idle threads in the pool, or if fewer than maxPoolSize threads are running and the
 	 * queue defined by queueCapacity is full.
-	 */
-
-	/**
-	 * Create a new bursting thread pool executor. For the details on all parameters see
-	 * {@link java.util.concurrent.ThreadPoolExecutor}.
+	 * </p>
 	 *
 	 * @param corePoolSize
 	 *            The core pool size of the main pool.
@@ -107,6 +106,25 @@ public interface MultiThreadPoolExecutor extends ExecutorService {
 	 *            The state change listener.
 	 */
 	void registerStateChangeListener(StateChangeListener<TaskRegistryState> stateChangeListener);
+
+	/**
+	 * Override the default executor for metrics change listeners which runs them synchronously as part of the main
+	 * operations. This may be used to move to an asynchronous processing of change listeners.
+	 *
+	 * @param executor
+	 *            The executor.
+	 */
+	void setMetricsChangeListenerExecutor(Executor executor);
+
+	/**
+	 * Register a metrics change listener. Note that state change listeners are by default executed synchronously during
+	 * operations and should therefore finish very fast.
+	 * To override this default behaviour see {@link #setMetricsChangeListenerExecutor(Executor)}.
+	 *
+	 * @param stateChangeListener
+	 *            The state change listener.
+	 */
+	void registerMetricsChangeListener(StateChangeListener<TaskRegistryMetrics> stateChangeListener);
 
 	/**
 	 * Get a snapshot of the current metrics.

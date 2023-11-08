@@ -1,7 +1,5 @@
 package io.github.nioertel.async.task.registry;
 
-import java.util.Set;
-
 public interface TaskRegistryInfoAccessor {
 
 	/**
@@ -18,7 +16,4 @@ public interface TaskRegistryInfoAccessor {
 	 */
 	TaskRegistryState getStateSnapshot();
 
-	default Set<Long> getCurrentlyExecutingTasksSnapshot() {
-		return getStateSnapshot().getCurrentlyExecutingTasks();
-	}
 }

@@ -56,6 +56,11 @@ class TaskRegistryStateInternal implements TaskRegistryState, Versioned {
 	final Set<Long> currentlyParkedTasks;
 
 	/**
+	 * The last executed operation.
+	 */
+	String lastOperation;
+
+	/**
 	 * Constructor.
 	 */
 	public TaskRegistryStateInternal() {
@@ -94,11 +99,12 @@ class TaskRegistryStateInternal implements TaskRegistryState, Versioned {
 			this.currentlyAssignedTasksByExecutorAndTaskFamily.put(executorId, currentlyAssignedTasksForExecutorByTaskFamily);
 		});
 		this.currentlyParkedTasks = new LinkedHashSet<>(source.currentlyParkedTasks);
+		this.lastOperation = source.lastOperation;
 	}
 
 	@Override
 	public long getStateVersion() {
-		return stateVersion.get();
+		return getVersion();
 	}
 
 	@Override
@@ -156,4 +162,40 @@ class TaskRegistryStateInternal implements TaskRegistryState, Versioned {
 		return stateVersion.get();
 	}
 
+	public void setLastOperation(String lastOperation) {
+		this.lastOperation = lastOperation;
+	}
+
+	@Override
+	public String toString() {
+		StringBuilder sb = new StringBuilder()//
+				.append("Current state:").append(System.lineSeparator())//
+				.append("  Current version:              ").append(stateVersion.get()).append(System.lineSeparator())//
+				.append("  Last operation:               ").append(lastOperation).append(System.lineSeparator())//
+				.append("  Last provided task id:        ").append(taskIdProvider.get()).append(System.lineSeparator())//
+				.append("  Last provided task family id: ").append(taskFamilyIdProvider.get()).append(System.lineSeparator())//
+				.append("  Currently submitted tasks:    ").append(System.lineSeparator());
+		if (currentlySubmittedTasks.isEmpty()) {
+			sb.append("    ").append("n/a").append(System.lineSeparator());
+		} else {
+			for (TaskState taskState : currentlySubmittedTasks.values()) {
+				sb.append("    ").append(taskState).append(System.lineSeparator());
+			}
+		}
+		sb.append("  Currently submitted tasks by executor + family: ").append(System.lineSeparator());
+		if (currentlyAssignedTasksByExecutorAndTaskFamily.isEmpty()) {
+			sb.append("    ").append("n/a").append(System.lineSeparator());
+		} else {
+			currentlyAssignedTasksByExecutorAndTaskFamily.forEach((executor, tasksForExecutorByFamily) -> {
+				sb.append("    Executor ").append(executor).append(":").append(System.lineSeparator());
+				tasksForExecutorByFamily.forEach((family, tasksForExecutorAndFamily) -> {
+					sb.append("      Family ").append(family).append(": ").append(tasksForExecutorAndFamily).append(System.lineSeparator());
+				});
+			});
+		}
+		sb//
+				.append("  Currently executing tasks:    ").append(currentlyExecutingTasks).append(System.lineSeparator())//
+				.append("  Currently parked tasks:       ").append(currentlyParkedTasks);
+		return sb.toString();
+	}
 }

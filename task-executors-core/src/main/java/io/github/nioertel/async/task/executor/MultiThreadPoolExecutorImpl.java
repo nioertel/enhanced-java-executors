@@ -24,7 +24,7 @@ import io.github.nioertel.async.task.registry.TaskRegistryInfoAccessor;
 import io.github.nioertel.async.task.registry.TaskRegistryMetrics;
 import io.github.nioertel.async.task.registry.TaskRegistryState;
 import io.github.nioertel.async.task.registry.TaskState;
-import io.github.nioertel.async.task.registry.internal.TaskExecutorAssignmentState;
+import io.github.nioertel.async.task.registry.internal.TaskProgress;
 import io.github.nioertel.async.task.registry.internal.TaskRegistry;
 import io.github.nioertel.async.task.registry.internal.ThreadTrackingTaskDecorator;
 import io.github.nioertel.async.task.registry.state.StateChangeListener;
@@ -145,8 +145,9 @@ class MultiThreadPoolExecutorImpl<T extends ExecutorIdAssigner> extends Abstract
 		for (TaskState submissionResult : taskRegistry.resubmitParkedTasks()) {
 			Runnable taskForResubmission = parkedDecoratedTasks.remove(submissionResult.getId());
 			if (null == taskForResubmission) {
+				// NOTE: This is just to be fail-safe. This should actually never happen
 				logger.warn("Skipping resubmission of task {} as task does not exist.", submissionResult.getId());
-				// TODO: cleanup registry state
+				taskRegistry.taskDiscarded(submissionResult.getId());
 			} else {
 				// TODO: This can likely be further optimised (currently we run into situations where this is called multiple times in
 				// parallel - which is technically ok but costs performance)
@@ -156,7 +157,7 @@ class MultiThreadPoolExecutorImpl<T extends ExecutorIdAssigner> extends Abstract
 	}
 
 	private void submitTaskToExecutor(Runnable command, TaskState submissionResult) {
-		if (TaskExecutorAssignmentState.PARKED == submissionResult.getExecutorAssignmentState()) {
+		if (TaskProgress.PARKED == submissionResult.getTaskProgress() || TaskProgress.LONG_PARKED == submissionResult.getTaskProgress()) {
 			logger.error("Task {} has been temporarily parked and will be resubmitted later.", submissionResult.getId());
 			parkedDecoratedTasks.put(submissionResult.getId(), command);
 			return;
@@ -307,6 +308,16 @@ class MultiThreadPoolExecutorImpl<T extends ExecutorIdAssigner> extends Abstract
 	}
 
 	@Override
+	public void setMetricsChangeListenerExecutor(Executor executor) {
+		taskRegistry.setMetricsChangeListenerExecutor(executor);
+	}
+
+	@Override
+	public void registerMetricsChangeListener(StateChangeListener<TaskRegistryMetrics> stateChangeListener) {
+		taskRegistry.registerMetricsChangeListener(stateChangeListener);
+	}
+
+	@Override
 	public TaskRegistryMetrics getMetricsSnapshot() {
 		return taskRegistry.getMetricsSnapshot();
 	}
@@ -319,4 +330,5 @@ class MultiThreadPoolExecutorImpl<T extends ExecutorIdAssigner> extends Abstract
 	protected TaskRegistryInfoAccessor getTaskRegistryInfo() {
 		return taskRegistry;
 	}
+
 }

@@ -6,6 +6,7 @@ import java.util.concurrent.Executor;
 import io.github.nioertel.async.task.registry.ExecutorIdAssigner;
 import io.github.nioertel.async.task.registry.Identifiable;
 import io.github.nioertel.async.task.registry.TaskRegistryInfoAccessor;
+import io.github.nioertel.async.task.registry.TaskRegistryMetrics;
 import io.github.nioertel.async.task.registry.TaskRegistryState;
 import io.github.nioertel.async.task.registry.TaskState;
 import io.github.nioertel.async.task.registry.state.StateChangeListener;
@@ -61,6 +62,26 @@ public interface TaskRegistry extends TaskRegistryInfoAccessor {
 	List<TaskState> resubmitParkedTasks();
 
 	/**
+	 * Discard the given task from the registry.
+	 *
+	 * @param taskId
+	 *            The task ID.
+	 *
+	 * @return The task state.
+	 */
+	TaskState taskDiscarded(long taskId);
+
+	/**
+	 * Get a snapshot of the current state
+	 *
+	 * @param taskId
+	 *            The task ID.
+	 *
+	 * @return A snapshot of the task state.
+	 */
+	TaskState getTaskStateSnapshot(long taskId);
+
+	/**
 	 * Register a task with its submitting thread.
 	 *
 	 * @param task
@@ -91,5 +112,24 @@ public interface TaskRegistry extends TaskRegistryInfoAccessor {
 	 *            The state change listener.
 	 */
 	void registerStateChangeListener(StateChangeListener<TaskRegistryState> stateChangeListener);
+
+	/**
+	 * Override the default executor for metrics change listeners which runs them synchronously as part of the main
+	 * operations. This may be used to move to an asynchronous processing of change listeners.
+	 *
+	 * @param executor
+	 *            The executor.
+	 */
+	void setMetricsChangeListenerExecutor(Executor executor);
+
+	/**
+	 * Register a metrics change listener. Note that state change listeners are by default executed synchronously during
+	 * operations and should therefore finish very fast.
+	 * To override this default behaviour see {@link #setMetricsChangeListenerExecutor(Executor)}.
+	 *
+	 * @param stateChangeListener
+	 *            The state change listener.
+	 */
+	void registerMetricsChangeListener(StateChangeListener<TaskRegistryMetrics> stateChangeListener);
 
 }

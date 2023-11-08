@@ -8,6 +8,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.github.nioertel.async.task.registry.ExecutorIdAssigner;
 import io.github.nioertel.async.task.registry.ExecutorIdAssignment;
 import io.github.nioertel.async.task.registry.ExecutorIdAssignment.ExecutorIdAssignmentCommand;
@@ -21,7 +24,7 @@ import io.github.nioertel.async.task.registry.state.StateChangeLstenerNotifier;
 
 final class TaskRegistryImpl implements TaskRegistry {
 
-	// private static final Logger LOGGER = LoggerFactory.getLogger(TaskRegistryImpl.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(TaskRegistryImpl.class);
 
 	private final ThreadTrackingTaskDecoratorImpl threadTrackingTaskDecorator = new ThreadTrackingTaskDecoratorImpl(this);
 
@@ -36,7 +39,9 @@ final class TaskRegistryImpl implements TaskRegistry {
 	private final StateAccessor<TaskRegistryMetricsInternal, TaskRegistryMetrics> metricsAccessor =
 			new StateAccessor<>(TaskRegistryMetricsInternal::new, TaskRegistryMetricsInternal::new);
 
-	private final StateChangeLstenerNotifier<TaskRegistryState> listenerNotifier = new StateChangeLstenerNotifier<>();
+	private final StateChangeLstenerNotifier<TaskRegistryState> stateChangeListenerNotifier = new StateChangeLstenerNotifier<>();
+
+	private final StateChangeLstenerNotifier<TaskRegistryMetrics> metricsChangeListenerNotifier = new StateChangeLstenerNotifier<>();
 
 	public TaskRegistryImpl(ExecutorIdAssigner executorIdAssigner) {
 		this.executorIdAssigner = executorIdAssigner;
@@ -51,8 +56,10 @@ final class TaskRegistryImpl implements TaskRegistry {
 	public long generateNewTaskId() {
 		return stateAccessor.update(//
 				"generateNewTaskId", //
-				state -> state.taskIdProvider.incrementAndGet(), //
-				listenerNotifier.getListenerWrapper());
+				state -> {
+					return state.taskIdProvider.incrementAndGet();
+				}, //
+				stateChangeListenerNotifier.getListenerWrapper());
 	}
 
 	@Override
@@ -67,19 +74,19 @@ final class TaskRegistryImpl implements TaskRegistry {
 					TaskStateInternal taskStateInternal = state.currentlySubmittedTasks.get(taskId);
 					taskStateInternal.setExecutionStartDateEpochMillis(executionStartDateEpochMillis);
 					taskStateInternal.setAssignedThreadId(assignedThreadId);
+					taskStateInternal.setTaskProgress(TaskProgress.RUNNING);
 					state.currentlyExecutingTasks.add(taskId);
 					state.threadIdTaskIdMappings.put(assignedThreadId, taskId);
-					return taskStateInternal;
+					return new TaskStateInternal(taskStateInternal);
 				}, //
-				listenerNotifier.getListenerWrapper());
-		metricsAccessor.update(//
+				stateChangeListenerNotifier.getListenerWrapper());
+		metricsAccessor.updateWithoutResult(//
 				"taskSubmitted", //
 				state -> {
 					state.numCurrentlyExecutingTasks++;
 					state.totalWaitTimeForExecutionStartMs += (executionStartDateEpochMillis - taskState.getSubmissionDateEpochMillis());
-					return null;
 				}, //
-				null//
+				metricsChangeListenerNotifier.getListenerWrapper()//
 		);
 	}
 
@@ -95,32 +102,23 @@ final class TaskRegistryImpl implements TaskRegistry {
 					// once execution finishes we can remove the task from the registry
 					TaskStateInternal taskStateInternal = state.currentlySubmittedTasks.remove(taskId);
 					taskStateInternal.setExecutionEndDateEpochMillis(executionEndDateEpochMillis);
+					taskStateInternal.setTaskProgress(TaskProgress.FINISHED);
 					state.threadIdTaskIdMappings.remove(taskStateInternal.getAssignedThreadId());
 
 					// remove from submitted tasks by family+executor tracker
-					Map<Long, Set<Long>> currentlyExecutingTasksByTaskFamilyForExecutor =
-							state.currentlyAssignedTasksByExecutorAndTaskFamily.get(taskStateInternal.getAssignedExecutorId());
-					Set<Long> tasksForParentTaskFamily = currentlyExecutingTasksByTaskFamilyForExecutor.get(taskStateInternal.getTaskFamilyId());
-					tasksForParentTaskFamily.remove(taskId);
-					if (tasksForParentTaskFamily.isEmpty()) {
-						currentlyExecutingTasksByTaskFamilyForExecutor.remove(taskStateInternal.getTaskFamilyId());
-						if (currentlyExecutingTasksByTaskFamilyForExecutor.isEmpty()) {
-							state.currentlyAssignedTasksByExecutorAndTaskFamily.remove(taskStateInternal.getTaskFamilyId());
-						}
-					}
-					return taskStateInternal;
+					removeTaskFromExecutorAndFamilyAssignmentTracking(state, taskStateInternal);
+					return new TaskStateInternal(taskStateInternal);
 				}, //
-				listenerNotifier.getListenerWrapper());
-		metricsAccessor.update(//
+				stateChangeListenerNotifier.getListenerWrapper());
+		metricsAccessor.updateWithoutResult(//
 				"taskSubmitted", //
 				state -> {
 					state.numCurrentlySubmittedTasks--;
 					state.numCurrentlyExecutingTasks--;
 					state.totalNumExecutedTasks++;
 					state.totalExecutionTimeMs += (executionEndDateEpochMillis - taskState.getExecutionStartDateEpochMillis());
-					return null;
 				}, //
-				null//
+				metricsChangeListenerNotifier.getListenerWrapper()//
 		);
 	}
 
@@ -134,21 +132,22 @@ final class TaskRegistryImpl implements TaskRegistry {
 						TaskStateInternal taskState = state.currentlySubmittedTasks.get(taskId);
 						ExecutorIdAssignment executorIdAssignment = executorIdAssigner.assignExecutorId(this, taskState);
 						if (ExecutorIdAssignmentCommand.ASSIGN == executorIdAssignment.getCommand()) {
-							taskState.setExecutorAssignmentState(TaskExecutorAssignmentState.ASSIGNED);
+							taskState.setTaskProgress(TaskProgress.SUBMITTED);
 							taskState.setAssignedExecutorId(executorIdAssignment.getAssignedExecutorId());
 							taskState.setExecutorAssignedDateEpochMillis(System.currentTimeMillis());
 							state.currentlyAssignedTasksByExecutorAndTaskFamily//
 									.computeIfAbsent(taskState.getAssignedExecutorId(), e -> new LinkedHashMap<>())//
 									.computeIfAbsent(taskState.getTaskFamilyId(), f -> new LinkedHashSet<>())//
 									.add(taskId);
-							resubmittedTasks.add(taskState);
+							resubmittedTasks.add(new TaskStateInternal(taskState));
 						} else {
-							// TODO: Work around log flood!!!
-							// long currentWaitingTimeMs = System.currentTimeMillis() - taskState.getSubmissionDateEpochMillis();
-							// if (currentWaitingTimeMs > 30_000L) {
-							// LOGGER.warn("Task {} has been parked for {} seconds and is still not ready for execution!", taskState.getId(),
-							// currentWaitingTimeMs / 1_000L);
-							// }
+							long currentWaitingTimeMs = System.currentTimeMillis() - taskState.getSubmissionDateEpochMillis();
+							if (TaskProgress.PARKED == taskState.getTaskProgress() && currentWaitingTimeMs > 30_000L) {
+								// move into state LONG_PARKED
+								taskState.setTaskProgress(TaskProgress.LONG_PARKED);
+								LOGGER.warn("Task {} has been parked for {} seconds and has still not been assigned for execution!",
+										taskState.getId(), currentWaitingTimeMs / 1_000L);
+							}
 						}
 					}
 					for (TaskState taskState : resubmittedTasks) {
@@ -156,9 +155,9 @@ final class TaskRegistryImpl implements TaskRegistry {
 					}
 					return resubmittedTasks;
 				}, //
-				listenerNotifier.getListenerWrapper()//
+				stateChangeListenerNotifier.getListenerWrapper()//
 		);
-		metricsAccessor.update(//
+		metricsAccessor.updateWithoutResult(//
 				"taskSubmitted", //
 				metricsState -> {
 					for (TaskState taskState : successfullyResubmittedTasks) {
@@ -166,22 +165,87 @@ final class TaskRegistryImpl implements TaskRegistry {
 								(taskState.getExecutorAssignedDateEpochMillis() - taskState.getSubmissionDateEpochMillis());
 						metricsState.numCurrentlyParkedTasks--;
 					}
-					return null;
 				}, //
-				null//
+				metricsChangeListenerNotifier.getListenerWrapper()//
 		);
 		return successfullyResubmittedTasks;
 	}
 
 	@Override
 	public TaskStateInternal taskSubmitted(Identifiable task, Thread submittingThread) {
-		return submitTask(submittingThread.getId(), task.getId());
+		return submitTask("taskSubmitted", submittingThread.getId(), task.getId());
 	}
 
-	private TaskStateInternal submitTask(long submittingThreadId, long taskId) {
+	private void removeTaskFromExecutorAndFamilyAssignmentTracking(TaskRegistryStateInternal state, TaskState taskState) {
+		Map<Long, Set<Long>> currentlyExecutingTasksByTaskFamilyForExecutor =
+				state.currentlyAssignedTasksByExecutorAndTaskFamily.get(taskState.getAssignedExecutorId());
+		if (null == currentlyExecutingTasksByTaskFamilyForExecutor) {
+			return;
+		}
+		Set<Long> tasksForParentTaskFamily = currentlyExecutingTasksByTaskFamilyForExecutor.get(taskState.getTaskFamilyId());
+		if (null == tasksForParentTaskFamily) {
+			return;
+		}
+		tasksForParentTaskFamily.remove(taskState.getId());
+		if (tasksForParentTaskFamily.isEmpty()) {
+			currentlyExecutingTasksByTaskFamilyForExecutor.remove(taskState.getTaskFamilyId());
+			if (currentlyExecutingTasksByTaskFamilyForExecutor.isEmpty()) {
+				state.currentlyAssignedTasksByExecutorAndTaskFamily.remove(taskState.getAssignedExecutorId());
+			}
+		}
+	}
+
+	@Override
+	public TaskState taskDiscarded(long taskId) {
+		long executionEndDateEpochMillis = System.currentTimeMillis();
+		TaskState taskState = stateAccessor.update(//
+				"taskDiscarded", //
+				state -> {
+					// once execution finishes we can remove the task from the registry
+					TaskStateInternal taskStateInternal = state.currentlySubmittedTasks.remove(taskId);
+					if (null == taskStateInternal) {
+						// Task does not exist / nothing to do
+						return null;
+					}
+					taskStateInternal.setExecutionEndDateEpochMillis(executionEndDateEpochMillis);
+					if (taskStateInternal.getTaskProgress() == TaskProgress.RUNNING) {
+						state.currentlyExecutingTasks.remove(taskId);
+						taskStateInternal.setTaskProgress(TaskProgress.DISCARDED_WHILE_RUNNING);
+					} else if (state.currentlyParkedTasks.remove(taskId)) {
+						taskStateInternal.setTaskProgress(TaskProgress.DISCARDED_WHILE_PARKED);
+					} else {
+						taskStateInternal.setTaskProgress(TaskProgress.DISCARDED);
+					}
+
+					state.threadIdTaskIdMappings.remove(taskStateInternal.getAssignedThreadId());
+
+					// remove from submitted tasks by family+executor tracker
+					removeTaskFromExecutorAndFamilyAssignmentTracking(state, taskStateInternal);
+					return new TaskStateInternal(taskStateInternal);
+				}, //
+				stateChangeListenerNotifier.getListenerWrapper());
+		if (null != taskState) {
+			metricsAccessor.updateWithoutResult(//
+					"taskDiscarded", //
+					state -> {
+						state.numCurrentlySubmittedTasks--;
+						state.totalNumDiscardedTasks++;
+						if (TaskProgress.DISCARDED_WHILE_RUNNING == taskState.getTaskProgress()) {
+							state.numCurrentlyExecutingTasks--;
+						} else if (TaskProgress.DISCARDED_WHILE_PARKED == taskState.getTaskProgress()) {
+							state.numCurrentlyParkedTasks--;
+						}
+					}, //
+					metricsChangeListenerNotifier.getListenerWrapper()//
+			);
+		}
+		return taskState;
+	}
+
+	private TaskStateInternal submitTask(String originalOperationName, long submittingThreadId, long taskId) {
 		long submissionStartDateMs = System.currentTimeMillis();
 		TaskStateInternal taskState = stateAccessor.update(//
-				"taskSubmitted", //
+				originalOperationName, //
 				state -> {
 					Long parentTaskId = state.threadIdTaskIdMappings.get(submittingThreadId);
 					TaskStateInternal newTaskState;
@@ -207,7 +271,7 @@ final class TaskRegistryImpl implements TaskRegistry {
 					}
 					ExecutorIdAssignment executorIdAssignment = executorIdAssigner.assignExecutorId(this, newTaskState);
 					if (ExecutorIdAssignmentCommand.ASSIGN == executorIdAssignment.getCommand()) {
-						newTaskState.setExecutorAssignmentState(TaskExecutorAssignmentState.ASSIGNED);
+						newTaskState.setTaskProgress(TaskProgress.SUBMITTED);
 						newTaskState.setAssignedExecutorId(executorIdAssignment.getAssignedExecutorId());
 						newTaskState.setExecutorAssignedDateEpochMillis(System.currentTimeMillis());
 						state.currentlyAssignedTasksByExecutorAndTaskFamily//
@@ -215,38 +279,55 @@ final class TaskRegistryImpl implements TaskRegistry {
 								.computeIfAbsent(newTaskState.getTaskFamilyId(), f -> new LinkedHashSet<>())//
 								.add(taskId);
 					} else {
-						newTaskState.setExecutorAssignmentState(TaskExecutorAssignmentState.PARKED);
+						newTaskState.setTaskProgress(TaskProgress.PARKED);
 						state.currentlyParkedTasks.add(taskId);
 					}
 					state.currentlySubmittedTasks.put(taskId, newTaskState);
 
-					return newTaskState;
+					return new TaskStateInternal(newTaskState);
 				}, //
-				listenerNotifier.getListenerWrapper());
-		metricsAccessor.update(//
+				stateChangeListenerNotifier.getListenerWrapper());
+		metricsAccessor.updateWithoutResult(//
 				"taskSubmitted", //
 				metricsState -> {
 					metricsState.numCurrentlySubmittedTasks++;
 					metricsState.totalNumSubmittedTasks++;
-					metricsState.totalExecutorAssignmentWaitTimeMs += (taskState.getExecutorAssignedDateEpochMillis() - submissionStartDateMs);
-					if (TaskExecutorAssignmentState.PARKED == taskState.getExecutorAssignmentState()) {
+					if (TaskProgress.PARKED == taskState.getTaskProgress()) {
 						metricsState.numCurrentlyParkedTasks++;
+					} else {
+						metricsState.totalExecutorAssignmentWaitTimeMs += (taskState.getExecutorAssignedDateEpochMillis() - submissionStartDateMs);
 					}
-					return null;
 				}, //
-				null//
+				metricsChangeListenerNotifier.getListenerWrapper()//
 		);
 		return taskState;
 	}
 
 	@Override
+	public TaskState getTaskStateSnapshot(long taskId) {
+		return stateAccessor.extract(registryState -> {
+			return new TaskStateInternal(registryState.currentlySubmittedTasks.get(taskId));
+		});
+	}
+
+	@Override
 	public void setStateChangeListenerExecutor(Executor executor) {
-		listenerNotifier.setStateChangeListenerExecutor(executor);
+		stateChangeListenerNotifier.setStateChangeListenerExecutor(executor);
 	}
 
 	@Override
 	public void registerStateChangeListener(StateChangeListener<TaskRegistryState> stateChangeListener) {
-		listenerNotifier.registerStateChangeListener(stateChangeListener);
+		stateChangeListenerNotifier.registerStateChangeListener(stateChangeListener);
+	}
+
+	@Override
+	public void setMetricsChangeListenerExecutor(Executor executor) {
+		metricsChangeListenerNotifier.setStateChangeListenerExecutor(executor);
+	}
+
+	@Override
+	public void registerMetricsChangeListener(StateChangeListener<TaskRegistryMetrics> stateChangeListener) {
+		metricsChangeListenerNotifier.registerStateChangeListener(stateChangeListener);
 	}
 
 	@Override
