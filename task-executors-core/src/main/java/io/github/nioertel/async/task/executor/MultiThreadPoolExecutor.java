@@ -2,7 +2,6 @@ package io.github.nioertel.async.task.executor;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -13,7 +12,7 @@ import io.github.nioertel.async.task.registry.TaskRegistryMetrics;
 import io.github.nioertel.async.task.registry.TaskRegistryState;
 import io.github.nioertel.async.task.registry.state.StateChangeListener;
 
-public interface MultiThreadPoolExecutor extends ExecutorService {
+public interface MultiThreadPoolExecutor extends RegistryBackedExecutorService {
 
 	/**
 	 * Create a new bursting thread pool executor. For the details on all parameters see
@@ -126,17 +125,4 @@ public interface MultiThreadPoolExecutor extends ExecutorService {
 	 */
 	void registerMetricsChangeListener(StateChangeListener<TaskRegistryMetrics> stateChangeListener);
 
-	/**
-	 * Get a snapshot of the current metrics.
-	 *
-	 * @return The metrics snapshot.
-	 */
-	TaskRegistryMetrics getMetricsSnapshot();
-
-	/**
-	 * Get a snapshot of the current state.
-	 *
-	 * @return The state snapshot.
-	 */
-	TaskRegistryState getStateSnapshot();
 }

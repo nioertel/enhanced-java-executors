@@ -45,11 +45,12 @@ class TaskExecutorStateEndpointTest {
 		private static final String TASK_EXECUTOR_NAME = "test-1";
 
 		@Bean
-		TaskRegistryInsightsRetriever taskRegistryMetricsRetriever(BurstingThreadPoolExecutor executor) {
+		TaskRegistryInsightsRetriever taskRegistryInsightsRetrieverTest1(RegistryBackedExecutorService executor) {
 			return new TaskRegistryInsightsRetriever(//
-					TASK_EXECUTOR_NAME, //
-					executor::getStateSnapshot, //
-					executor::getMetricsSnapshot//
+					TASK_EXECUTOR_NAME, // registryName
+					executor::getStateSnapshot, // stateSupplier
+					executor::getMetricsSnapshot, // metricsSupplier
+					100// micrometerMetricsChangePublishingIntervalMillis
 			);
 		}
 

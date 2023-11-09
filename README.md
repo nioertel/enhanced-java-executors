@@ -109,7 +109,35 @@ try {
 
 ----------------------------------------------------
 ## task-executors-spring-boot-27
-TODO: add docs
+When using Spring Boot, there is an auto configuration in place (`TaskRegistryInsightsEndpointsAutoConfiguration`).
+The auto configuration creates acuator and metrics integrations if it finds at least on `TaskRegistryInsightsRetriever` bean in the application context, which can be created using the following code snipped:
+```java
+  @Bean
+  TaskRegistryInsightsRetriever taskRegistryInsightsRetriever(RegistryBackedExecutorService executor) {
+    return new TaskRegistryInsightsRetriever(//
+      "my-task-registry", // registryName
+      executor::getStateSnapshot, // stateSupplier
+      executor::getMetricsSnapshot, // metricsSupplier
+      10_000 // micrometerMetricsChangePublishingIntervalMillis
+    );
+  }
+```
+
+The following integrations will be creatd:
+- Actuator endpoint `taskRegistryMetrics`: Provides a snapshot of the metrics per task registry (i.e. per registered `TaskRegistryInsightsRetriever`)
+- Actuator endpoint `taskRegistryState`: Provides a snapshot of the state per task registry (i.e. per registered `TaskRegistryInsightsRetriever`)
+- Micrometer metrics for each task registry (i.e. per registered `TaskRegistryInsightsRetriever`; only if a `io.micrometer.core.instrument.MeterRegistry` is present in the appliction context):
+  - Gauge `task_registry_state_version`
+  - Gauge `task_registry_num_currently_submitted_tasks`
+  - Gauge `task_registry_num_currently_executing_tasks`
+  - Gauge `task_registry_num_currently_parked_tasks`
+  - Gauge `task_registry_total_num_submitted_tasks`
+  - Gauge `task_registry_total_num_executed_tasks`
+  - Gauge `task_registry_total_num_discarded_tasks`
+  - Timer `task_registry_executor_assignment_wait_time`
+  - Timer `task_registry_execution_start_wait_time`
+  - Timer `task_registry_execution_time`
+Note: The metrics will be updated only in the configured interval.
 
 ----------------------------------------------------
 ## task-executors-test-helper

@@ -13,11 +13,14 @@ public class TaskRegistryInsightsRetriever {
 
 	private final Supplier<TaskRegistryMetrics> metricsSupplier;
 
+	private final int micrometerMetricsChangePublishingIntervalMillis;
+
 	public TaskRegistryInsightsRetriever(String registryName, Supplier<TaskRegistryState> stateSupplier,
-			Supplier<TaskRegistryMetrics> metricsSupplier) {
+			Supplier<TaskRegistryMetrics> metricsSupplier, int micrometerMetricsChangePublishingIntervalMillis) {
 		this.registryName = registryName;
 		this.stateSupplier = stateSupplier;
 		this.metricsSupplier = metricsSupplier;
+		this.micrometerMetricsChangePublishingIntervalMillis = micrometerMetricsChangePublishingIntervalMillis;
 	}
 
 	public String getRegistryName() {
@@ -31,4 +34,9 @@ public class TaskRegistryInsightsRetriever {
 	public TaskRegistryStateSummary getStateSummary() {
 		return new TaskRegistryStateSummary(stateSupplier.get());
 	}
+
+	public int getMicrometerMetricsChangePublishingIntervalMillis() {
+		return micrometerMetricsChangePublishingIntervalMillis;
+	}
+
 }

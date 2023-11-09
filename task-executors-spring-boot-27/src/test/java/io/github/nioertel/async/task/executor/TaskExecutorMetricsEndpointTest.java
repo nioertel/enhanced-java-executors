@@ -27,6 +27,8 @@ import io.github.nioertel.async.task.actuator.TaskRegistryMetricsSummary;
 import io.github.nioertel.async.task.executor.test.TestApp;
 import io.github.nioertel.async.test.NamedThreadFactory;
 import io.github.nioertel.async.test.ThrowingSupplier;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
 
 @SpringBootTest(//
 		classes = TestApp.class, //
@@ -44,11 +46,12 @@ class TaskExecutorMetricsEndpointTest {
 		private static final String TASK_EXECUTOR_NAME = "test-1";
 
 		@Bean
-		TaskRegistryInsightsRetriever taskRegistryMetricsRetriever(BurstingThreadPoolExecutor executor) {
+		TaskRegistryInsightsRetriever taskRegistryInsightsRetrieverTest1(RegistryBackedExecutorService executor) {
 			return new TaskRegistryInsightsRetriever(//
-					TASK_EXECUTOR_NAME, //
-					executor::getStateSnapshot, //
-					executor::getMetricsSnapshot//
+					TASK_EXECUTOR_NAME, // registryName
+					executor::getStateSnapshot, // stateSupplier
+					executor::getMetricsSnapshot, // metricsSupplier
+					100// micrometerMetricsChangePublishingIntervalMillis
 			);
 		}
 
@@ -81,6 +84,9 @@ class TaskExecutorMetricsEndpointTest {
 
 	@Autowired
 	private TestRestTemplate restTemplate;
+
+	@Autowired
+	private MeterRegistry meterRegistry;
 
 	@Test
 	void actuatorShouldBePresent() {
@@ -159,6 +165,15 @@ class TaskExecutorMetricsEndpointTest {
 					});
 				});
 
+		// wait 200 ms to ensure Micrometer metrics have been updated
+		sleep(200);
+		BDDAssertions.assertThat(meterRegistry.find("task_registry_num_currently_submitted_tasks").gauges())//
+				.hasSize(1)//
+				.anySatisfy(gauge -> {
+					BDDAssertions.assertThat(gauge.getId().getTags()).contains(Tag.of("registryName", Beans.TASK_EXECUTOR_NAME));
+					BDDAssertions.assertThat(gauge.value()).isEqualTo(1);
+				});
+
 		task.continueRunning();
 		BDDAssertions.assertThat(task.blockUntilExecutionFinished(30, TimeUnit.SECONDS))
 				.describedAs("Expecting task to start within 30 seconds. Issue with test setup.").isTrue();
@@ -177,6 +192,23 @@ class TaskExecutorMetricsEndpointTest {
 								.isEqualTo(metricsSummaryBeforeTest.getTotalNumExecutedTasks() + 1L);
 					});
 				});
+
+		// wait 200 ms to ensure Micrometer metrics have been updated
+		sleep(200);
+		BDDAssertions.assertThat(meterRegistry.find("task_registry_num_currently_submitted_tasks").gauges())//
+				.hasSize(1)//
+				.anySatisfy(gauge -> {
+					BDDAssertions.assertThat(gauge.getId().getTags()).contains(Tag.of("registryName", Beans.TASK_EXECUTOR_NAME));
+					BDDAssertions.assertThat(gauge.value()).isEqualTo(0);
+				});
 	}
 
+	private void sleep(long millis) {
+		try {
+			TimeUnit.MILLISECONDS.sleep(millis);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			BDDAssertions.fail("Interrupted while waiting for next test step.", e);
+		}
+	}
 }
