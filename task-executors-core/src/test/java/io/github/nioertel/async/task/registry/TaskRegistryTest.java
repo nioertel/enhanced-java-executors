@@ -483,9 +483,24 @@ class TaskRegistryTest {
 			BDDAssertions.assertThat(metrics.getTotalExecutorAssignmentWaitTimeMs())
 					.isEqualTo(taskState1.getExecutorAssignedDateEpochMillis() - taskState1.getSubmissionDateEpochMillis());
 			BDDAssertions.assertThat(metrics.getTotalWaitTimeForExecutionStartMs())
-			.isEqualTo(taskState3.getExecutionStartDateEpochMillis() - taskState3.getSubmissionDateEpochMillis());
+					.isEqualTo(taskState3.getExecutionStartDateEpochMillis() - taskState3.getSubmissionDateEpochMillis());
 			BDDAssertions.assertThat(metrics.getTotalExecutionTimeMs()).isEqualTo(0L);
 		});
 	}
-	// TODO: Add test for (parent) executor assignment
+
+	@Test
+	void testExecutorAssignment() {
+		TaskRegistry taskRegistry = TaskRegistry.newTaskRegistry((r, t) -> new ExecutorIdAssignment(ExecutorIdAssignmentCommand.ASSIGN, 8L));
+		taskRegistry.registerStateChangeListener(new LoggingTaskRegistryStateChangeListener());
+		taskRegistry.registerMetricsChangeListener(new LoggingMetricsStateChangeListener());
+
+		Thread mainThread = Thread.currentThread();
+
+		SimpleTestTask task1Internal = new SimpleTestTask("Task 1");
+		IdentifiableRunnable task1 = taskRegistry.getTrackingTaskDecorator().decorate(task1Internal);
+
+		TaskState taskState = taskRegistry.taskSubmitted(task1, mainThread);
+		BDDAssertions.assertThat(taskState.getAssignedExecutorId()).isEqualTo(8L);
+
+	}
 }

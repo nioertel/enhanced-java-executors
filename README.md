@@ -4,7 +4,7 @@ Specialized implementations of Java's `ExecutorService`.
 ----------------------------------------------------
 ## Contents
 * [Module: task-executors-core](#task-executors-core)
-* [Module: task-executors-spring5](#task-executors-spring5)
+* [Module: task-executors-spring-boot-27](#task-executors-spring-boot-27)
 * [Module: task-executors-test-helper](#task-executors-test-helper)
 
 ----------------------------------------------------
@@ -91,7 +91,7 @@ executor.registerStateChangeListener(new LoggingTaskRegistryStateChangeListener(
 executor.registerMetricsChangeListener(new LoggingMetricsStateChangeListener());
 
 try {
-    Runnable task1 = () -> Syste.out.println("Hello world");
+    Runnable task1 = () -> System.out.println("Hello world");
 
     // nothing should be running yet
     System.out.println(executor.getStateSnapshot().getCurrentlyExecutingTasks());
@@ -108,8 +108,8 @@ try {
 ```
 
 ----------------------------------------------------
-## task-executors-spring5
-TODO: coming soon
+## task-executors-spring-boot-27
+TODO: add docs
 
 ----------------------------------------------------
 ## task-executors-test-helper
